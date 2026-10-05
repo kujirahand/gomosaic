@@ -9,19 +9,19 @@ import (
 
 // DrawRedFrames は指定された矩形の枠線を赤色で画像に描き込みます。
 // 各ピクセルと線の重なり面積から被覆率を計算するため、アンチエイリアスが効きます。
-func DrawRedFrames(img image.Image, rects []image.Rectangle) image.Image {
+// widthPermille は線幅を画像の短辺に対する‰で指定します（最低2px）。
+// frameColor は枠線の色です。
+func DrawRedFrames(img image.Image, rects []image.Rectangle, widthPermille int, frameColor color.RGBA) image.Image {
 	bounds := img.Bounds()
 	result := image.NewRGBA(bounds)
 	draw.Draw(result, bounds, img, bounds.Min, draw.Src)
 
-	// 線幅は画像の短辺に比例させる（最低2px）
-	short := bounds.Dx()
+		short := bounds.Dx()
 	if bounds.Dy() < short {
 		short = bounds.Dy()
 	}
-	width := math.Max(2, float64(short)/300)
+	width := math.Max(2, float64(short)*float64(widthPermille)/1000)
 	half := width / 2
-	red := color.RGBA{255, 0, 0, 255}
 
 	for _, r := range rects {
 		r = r.Intersect(bounds)
@@ -46,7 +46,7 @@ func DrawRedFrames(img image.Image, rects []image.Rectangle) image.Image {
 				if cov <= 0 {
 					continue
 				}
-				blend(result, x, y, red, cov)
+				blend(result, x, y, frameColor, cov)
 			}
 		}
 	}

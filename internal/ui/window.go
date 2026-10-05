@@ -3,12 +3,16 @@ package ui
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"path/filepath"
 	"runtime"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 	"gomosaic/internal/config"
@@ -33,6 +37,7 @@ type Window struct {
 func NewWindow(fyneApp fyne.App, cfg *config.Config) *Window {
 	mosaicStrength := max(5, min(cfg.MosaicBlockSize, 30))
 	cfg.MosaicBlockSize = mosaicStrength
+	cfg.RedFrameWidth = max(1, min(cfg.RedFrameWidth, 20))
 	w := &Window{
 		imageLoader:    fyneImage.NewLoader(),
 		imageSaver:     fyneImage.NewSaver(),
@@ -110,20 +115,6 @@ func NewWindow(fyneApp fyne.App, cfg *config.Config) *Window {
 		w.zoomIn()
 	})
 
-	// モザイク幅スライダー（画像短辺に対する‰、設定から初期値を復元）
-	mosaicSlider := widget.NewSlider(5, 30)
-	mosaicSlider.SetValue(float64(mosaicStrength))
-	mosaicValue := widget.NewLabel(fmt.Sprintf("%d‰", mosaicStrength))
-	mosaicSlider.OnChanged = func(value float64) {
-		strength := int(value)
-		w.imageCanvas.SetMosaicStrength(strength)
-		// 設定に保存
-		w.config.MosaicBlockSize = strength
-		mosaicValue.SetText(fmt.Sprintf("%d‰", strength))
-	}
-	sliderLabel := widget.NewLabel("モザイク幅:")
-	slider := container.NewGridWrap(fyne.NewSize(200, mosaicSlider.MinSize().Height), mosaicSlider)
-
 	// モザイク適用ボタン
 	applyBtn := widget.NewButton("✨ モザイク適用", func() {
 		w.applyMosaic()
@@ -131,12 +122,17 @@ func NewWindow(fyneApp fyne.App, cfg *config.Config) *Window {
 	})
 
 	// 赤枠描画ボタン
-	redFrameBtn := widget.NewButton("🟥 赤枠を描画", func() {
+	redFrameBtn := widget.NewButton("🟥 枠を描画", func() {
 		w.applyRedFrame()
 	})
 
+	// 設定ボタン
+	settingsBtn := widget.NewButton("🔧", func() {
+		w.showSettingsDialog()
+	})
+
 	// ツールバー風のレイアウト
-	topBar := container.NewHBox(openBtn, saveBtn, undoBtn, zoomOutBtn, zoomInBtn, sliderLabel, slider, mosaicValue, applyBtn, redFrameBtn)
+	topBar := container.NewHBox(openBtn, saveBtn, undoBtn, zoomOutBtn, zoomInBtn, applyBtn, redFrameBtn, settingsBtn)
 	content := container.NewBorder(topBar, w.statusBar, nil, nil, w.imageCanvas.GetContainer())
 
 	w.window.SetContent(content)
@@ -145,7 +141,63 @@ func NewWindow(fyneApp fyne.App, cfg *config.Config) *Window {
 	// メニューバーの設定
 	w.setupMenu()
 
+	// キーボードショートカットの設定
+	w.setupShortcuts()
+
 	return w
+}
+
+// redFrameColor は設定された枠線の色を返します
+func (w *Window) redFrameColor() color.RGBA {
+	c, ok := config.ParseHexColor(w.config.RedFrameColor)
+	if !ok {
+		c = color.RGBA{255, 0, 0, 255}
+	}
+	return c
+}
+
+// showSettingsDialog はモザイク幅・枠線の太さと色を指定する設定ダイアログを表示します
+func (w *Window) showSettingsDialog() {
+	// モザイク幅（画像短辺に対する‰）
+	mosaicValue := widget.NewLabel(fmt.Sprintf("%d‰", w.config.MosaicBlockSize))
+	mosaicSlider := widget.NewSlider(5, 30)
+	mosaicSlider.SetValue(float64(w.config.MosaicBlockSize))
+	mosaicSlider.OnChanged = func(v float64) {
+		w.config.MosaicBlockSize = int(v)
+		w.imageCanvas.SetMosaicStrength(int(v))
+		mosaicValue.SetText(fmt.Sprintf("%d‰", int(v)))
+	}
+
+	// 枠線の太さ（画像短辺に対する‰）
+	frameValue := widget.NewLabel(fmt.Sprintf("%d‰", w.config.RedFrameWidth))
+	frameSlider := widget.NewSlider(1, 20)
+	frameSlider.SetValue(float64(w.config.RedFrameWidth))
+	frameSlider.OnChanged = func(v float64) {
+		w.config.RedFrameWidth = int(v)
+		frameValue.SetText(fmt.Sprintf("%d‰", int(v)))
+	}
+
+	// 枠線の色
+	swatch := canvas.NewRectangle(w.redFrameColor())
+	swatch.SetMinSize(fyne.NewSize(40, 24))
+	colorBtn := widget.NewButton("色を選択...", func() {
+		picker := dialog.NewColorPicker("枠線の色", "枠線の色を選択してください", func(c color.Color) {
+			w.config.RedFrameColor = config.FormatHexColor(c)
+			swatch.FillColor = w.redFrameColor()
+			swatch.Refresh()
+		}, w.window)
+		picker.Advanced = true
+		picker.Show()
+	})
+
+	form := container.New(layout.NewFormLayout(),
+		widget.NewLabel("モザイク幅"), container.NewBorder(nil, nil, nil, mosaicValue, mosaicSlider),
+		widget.NewLabel("枠線の太さ"), container.NewBorder(nil, nil, nil, frameValue, frameSlider),
+		widget.NewLabel("枠線の色"), container.NewHBox(swatch, colorBtn),
+	)
+	d := dialog.NewCustom("設定", "閉じる", form, w.window)
+	d.Resize(fyne.NewSize(420, d.MinSize().Height))
+	d.Show()
 }
 
 // OpenFileDialog はファイル選択ダイアログを表示します
@@ -187,6 +239,24 @@ func (w *Window) ShowAndRun() {
 	w.window.ShowAndRun()
 }
 
+// setupShortcuts は Cmd/Ctrl+S（保存）と Cmd/Ctrl+Z（元に戻す）を登録します
+func (w *Window) setupShortcuts() {
+	canvas := w.window.Canvas()
+	// Fyneは Cmd+Z（macOS）/ Ctrl+Z（その他）を CustomShortcut ではなく
+	// ShortcutUndo として配送するため、こちらで受ける
+	canvas.AddShortcut(&fyne.ShortcutUndo{}, func(fyne.Shortcut) {
+		w.undoHandler()
+	})
+	for _, mod := range []fyne.KeyModifier{fyne.KeyModifierSuper, fyne.KeyModifierControl} {
+		canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: mod}, func(fyne.Shortcut) {
+			w.SaveFileDialog()
+		})
+		canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: mod}, func(fyne.Shortcut) {
+			w.undoHandler()
+		})
+	}
+}
+
 // setupMenu はメニューバーを設定します
 func (w *Window) setupMenu() {
 	// ファイルメニュー
@@ -198,7 +268,6 @@ func (w *Window) setupMenu() {
 			w.SaveFileDialog()
 		}),
 	)
-	fileMenu.Items[0].Shortcut = &fyne.ShortcutCut{} // Ctrl+O の代わり
 
 	// 編集メニュー
 	editMenu := fyne.NewMenu("編集",
@@ -359,7 +428,7 @@ func (w *Window) applyRedFrame() {
 		rects[i] = sel.Rect
 	}
 
-	processed := fyneImage.DrawRedFrames(w.imageCanvas.GetImage(), rects)
+	processed := fyneImage.DrawRedFrames(w.imageCanvas.GetImage(), rects, w.config.RedFrameWidth, w.redFrameColor())
 	w.imageCanvas.SetImage(processed)
 	w.imageCanvas.ClearSelections()
 

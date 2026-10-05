@@ -11,7 +11,7 @@ func TestDrawRedFrames(t *testing.T) {
 	for i := range src.Pix {
 		src.Pix[i] = 255
 	}
-	out := DrawRedFrames(src, []image.Rectangle{image.Rect(20, 20, 80, 80)}).(*image.RGBA)
+	out := DrawRedFrames(src, []image.Rectangle{image.Rect(20, 20, 80, 80)}, 3, color.RGBA{255, 0, 0, 255}).(*image.RGBA)
 
 	if got := out.RGBAAt(20, 50); got != (color.RGBA{255, 0, 0, 255}) {
 		t.Errorf("edge pixel = %v, want solid red", got)
