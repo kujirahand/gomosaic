@@ -26,7 +26,8 @@ $dialog.Dispose()
 `)
 }
 
-func SaveImagePath() (string, error) {
+func SaveImagePath(defaultName string) (string, error) {
+	escaped := strings.ReplaceAll(defaultName, "'", "''")
 	return runPowerShellDialog(`
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.SaveFileDialog
@@ -36,7 +37,7 @@ $dialog.FilterIndex = 1
 $dialog.DefaultExt = 'png'
 $dialog.AddExtension = $true
 $dialog.OverwritePrompt = $true
-$dialog.FileName = 'gomosaic.png'
+$dialog.FileName = '` + escaped + `'
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
     [Console]::Out.WriteLine($dialog.FileName)
 }

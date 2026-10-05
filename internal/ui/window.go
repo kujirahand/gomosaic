@@ -26,6 +26,7 @@ type Window struct {
 	config         *config.Config
 	historyManager *HistoryManager
 	zoomLevel      float64 // 拡大・縮小レベル（1.0 = 100%）
+	loadedPath     string  // 最後に読み込んだ画像のパス
 }
 
 // NewWindow は新しいウィンドウを作成します
@@ -65,6 +66,7 @@ func NewWindow(fyneApp fyne.App, cfg *config.Config) *Window {
 				continue
 			}
 
+			w.loadedPath = path
 			w.imageCanvas.SetImage(img)
 			w.historyManager.AddImage(img)
 			w.updateStatus()
@@ -175,6 +177,7 @@ func (w *Window) OpenFileDialog() {
 
 	// サポートされているファイル形式をフィルタ
 	fd.SetFilter(storage.NewExtensionFileFilter([]string{".png", ".jpg", ".jpeg"}))
+	fd.SetFileName(w.defaultSaveName())
 
 	fd.Show()
 }
@@ -243,7 +246,7 @@ func (w *Window) SaveFileDialog() {
 	}
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		path, err := nativefiledialog.SaveImagePath()
+		path, err := nativefiledialog.SaveImagePath(w.defaultSaveName())
 		if err != nil {
 			dialog.ShowError(err, w.window)
 			return
@@ -272,8 +275,17 @@ func (w *Window) SaveFileDialog() {
 
 	// サポートされているファイル形式をフィルタ
 	fd.SetFilter(storage.NewExtensionFileFilter([]string{".png", ".jpg", ".jpeg"}))
+	fd.SetFileName(w.defaultSaveName())
 
 	fd.Show()
+}
+
+// defaultSaveName は保存ダイアログの初期ファイル名（読み込んだ画像と同じ名前）を返します
+func (w *Window) defaultSaveName() string {
+	if w.loadedPath == "" {
+		return "gomosaic.png"
+	}
+	return filepath.Base(w.loadedPath)
 }
 
 func (w *Window) openImage(path string) {
@@ -282,6 +294,7 @@ func (w *Window) openImage(path string) {
 		dialog.ShowError(err, w.window)
 		return
 	}
+	w.loadedPath = path
 	w.imageCanvas.SetImage(img)
 	w.historyManager.AddImage(img)
 	w.updateStatus()

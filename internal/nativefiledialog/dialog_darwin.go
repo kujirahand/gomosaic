@@ -17,9 +17,9 @@ const openScript = `on run
 	end try
 end run`
 
-const saveScript = `on run
+const saveScript = `on run argv
 	try
-		set selectedFile to choose file name with prompt "画像を保存" default name "gomosaic.png"
+		set selectedFile to choose file name with prompt "画像を保存" default name (item 1 of argv)
 		return POSIX path of selectedFile
 	on error number -128
 		return ""
@@ -30,12 +30,12 @@ func OpenImagePath() (string, error) {
 	return runAppleScript(openScript)
 }
 
-func SaveImagePath() (string, error) {
-	return runAppleScript(saveScript)
+func SaveImagePath(defaultName string) (string, error) {
+	return runAppleScript(saveScript, defaultName)
 }
 
-func runAppleScript(script string) (string, error) {
-	output, err := exec.Command("osascript", "-e", script).Output()
+func runAppleScript(script string, args ...string) (string, error) {
+	output, err := exec.Command("osascript", append([]string{"-e", script}, args...)...).Output()
 	if err != nil {
 		return "", fmt.Errorf("macOSファイルダイアログを開けません: %w", err)
 	}
